@@ -9,24 +9,18 @@
 namespace NashFrame\Util\Http;
 
 
-class Request
+final class Request
 {
-    private $get, $post, $attr, $cookie, $files, $server;
-    public function __construct(array $get, array $post, array $cookie, array $files, array $server)
+    private $get, $post, $cookie, $files, $server, $raw;
+
+    public function __construct(array $get, array $post, array $cookie, array $files, array $server, string $raw)
     {
+        $this->raw = $raw;
         $this->get = $get;
         $this->post = $post;
         $this->cookie = $cookie;
         $this->files = $files;
         $this->server = $server;
-    }
-
-    /**
-     * @param array $attr
-     */
-    public function setAttr(array $attr): void
-    {
-        $this->attr = $attr;
     }
 
     /**
@@ -71,6 +65,14 @@ class Request
     public function getMethod(): string
     {
         return strtoupper($this->getServer('REQUEST_METHOD'));
+    }
+
+    /**
+     * @return string
+     */
+    public function getRaw(): string
+    {
+        return $this->raw;
     }
 
     /**

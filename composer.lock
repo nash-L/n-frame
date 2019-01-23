@@ -206,16 +206,16 @@
         },
         {
             "name": "nash/n-inject",
-            "version": "v1.0",
+            "version": "v1.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nash-L/n-inject.git",
-                "reference": "f2af35e47331a168e95e4d92de18224d33d05355"
+                "reference": "7456b1162f9992b1b04156dbead3218373889e00"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nash-L/n-inject/zipball/f2af35e47331a168e95e4d92de18224d33d05355",
-                "reference": "f2af35e47331a168e95e4d92de18224d33d05355",
+                "url": "https://api.github.com/repos/nash-L/n-inject/zipball/7456b1162f9992b1b04156dbead3218373889e00",
+                "reference": "7456b1162f9992b1b04156dbead3218373889e00",
                 "shasum": "",
                 "mirrors": [
                     {
@@ -245,7 +245,7 @@
                 }
             ],
             "description": "一个依赖注入的工具",
-            "time": "2019-01-19T06:49:25+00:00"
+            "time": "2019-01-20T04:33:15+00:00"
         },
         {
             "name": "nikic/fast-route",

@@ -10,13 +10,6 @@ defined('ROOT') || define('ROOT', dirname(__DIR__));
 
 require dirname(ROOT) . '/vendor/autoload.php';
 
-try {
+$app = new NashFrame\App(ROOT);
 
-    $app = new NashFrame\App(ROOT);
-
-    $app->display('.env');
-
-} catch (Throwable $e) {
-    // 错误；
-    var_dump($e);
-}
+echo $app->display('.env');

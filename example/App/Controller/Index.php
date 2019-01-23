@@ -9,8 +9,20 @@
 namespace App\Controller;
 
 
+use NashFrame\Annotations\Route;
+
 class Index
 {
     public function main()
     {}
+
+    /**
+     * @Route("/user/{id:\d+}")
+     * @param int $id
+     * @return string
+     */
+    public function getId(int $id)
+    {
+        return 'Hello ' . $id;
+    }
 }
