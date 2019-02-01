@@ -2,141 +2,170 @@
 /**
  * Created by PhpStorm.
  * User: 18695
- * Date: 2019/1/20
- * Time: 11:07
+ * Date: 2019/1/31
+ * Time: 13:41
  */
 
 namespace NashFrame;
 
-use Doctrine\Common\Annotations\AnnotationReader;
-use NashFrame\Annotations\Route;
-use NashFrame\Traits\InjectorTrait;
-use NashFrame\Util\Http\Exception;
+
+use Medoo\Medoo;
 use NashFrame\Util\Http\Request;
+use NashFrame\Util\Router\Router;
+use NashFrame\Util\Config\Config;
+use NashFrame\Util\View\ViewEngine;
+use NashFrame\Util\View\ViewModel;
 use NashInject\Injector;
-use FastRoute\RouteCollector;
-use FastRoute\Dispatcher;
 
-use function FastRoute\cachedDispatcher;
-
-final class App
+class App extends Injector
 {
-    use InjectorTrait;
-
-    private $rootPath;
+    protected $event = [];
 
     /**
-     * App constructor.
-     * @param string $rootPath
-     * @throws \NashInject\Exception\InjectorException
-     */
-    public function __construct(string $rootPath)
-    {
-        $this->setInjector(new Injector);
-        $this->rootPath = $rootPath;
-    }
-
-    /**
-     * @param string $env
      * @return mixed
-     * @throws Exception
-     * @throws \NashInject\Exception\InjectorException
-     * @throws \ReflectionException
+     * @throws \Throwable
      */
-    public function display(string $env = '.env')
+    public function display()
     {
-        $this->init($env);
-        $routeInfo = $this->getInjector()->execute(function (Config $config, Request $request) {
-            $dispatcher = cachedDispatcher(function(RouteCollector $routeCollector) use ($config) {
-                $this->scanController($config->get('SYSTEM_CONTROLLER_DIR'), $config->get('SYSTEM_CONTROLLER_NAMESPACE'), $routeCollector, '');
-            }, [
-                'cacheFile' => $config->get('SYSTEM_RUNTIME_DIR') . DIRECTORY_SEPARATOR . 'route.cache',
-                'cacheDisabled' => $config->get('SYSTEM_DEBUG'),
-            ]);
-            return $dispatcher->dispatch($request->getMethod(), rawurldecode($request->getUrl()));
-        });
-        return $this->run($routeInfo);
+        try {
+            $request = $this->make(Request::class);
+            list($method, $uri) = $request->getServer(['REQUEST_METHOD', 'REQUEST_URI']);
+            $uriInfo = explode('?', $uri);
+            $routeInfo = $this->make(Router::class)->dispatch(
+                strtoupper($method),
+                rawurldecode($uriInfo[0])
+            );
+            $templatePath = $routeInfo[1][2];
+            $result = $this->run($routeInfo[1], array_merge($routeInfo[2], $request->getQuery()));
+        } catch (\Throwable $e) {
+            if (isset($this->event['exception']) && is_callable($this->event['exception'])) {
+                $result = call_user_func($this->event['exception'], $e, $this);
+                $templatePath = 'error';
+            } else {
+                throw $e;
+            }
+        }
+        return $this->transResult($result, $templatePath);
     }
 
     /**
-     * @param string $controllerDirectory
-     * @param string $controllerNamespace
-     * @param RouteCollector $routeCollector
-     * @param string $uriPrefix
-     * @param AnnotationReader|null $reader
-     * @throws \Doctrine\Common\Annotations\AnnotationException
+     * @param $handler
+     * @param $vars
+     * @return mixed
+     * @throws \NashInject\Exception\InjectorException
      * @throws \ReflectionException
      */
-    private function scanController(string $controllerDirectory, string $controllerNamespace, RouteCollector $routeCollector, string $uriPrefix = '', AnnotationReader $reader = null)
+    protected function run($handler, $vars)
     {
-        $files = scandir($controllerDirectory);
-        $reader = $reader ?? new AnnotationReader;
-        foreach ($files as $file) {
-            if ($file === '.' || $file === '..') {
-                continue;
-            }
-            $tempFile = $controllerDirectory . DIRECTORY_SEPARATOR . $file;
-            if (is_dir($tempFile)) {
-                $this->scanController($tempFile, $controllerNamespace . '\\' . $file, $routeCollector, $uriPrefix . '/' . $this->transPath($file), $reader);
-            } elseif (is_file($tempFile) && substr($file, -4) === '.php') {
-                $classShortName = substr($file, 0, -4);
-                if (class_exists($className = $controllerNamespace . '\\' . $classShortName)) {
-                    $methods = get_class_methods($className);
-                    foreach ($methods as $method) {
-                        $defaultRoute = new Route(['value' => $uriPrefix . '/' . $this->transPath($classShortName) . '/' . $this->transPath($method)]);
-                        $route = $reader->getMethodAnnotation(new \ReflectionMethod($className, $method), Route::class) ?? $defaultRoute;
-                        $routeCollector->addRoute($route->methods ?? $defaultRoute->methods, $route->value ?? $defaultRoute->value, [$className, $method]);
-                    }
+        $controller = $this->make($handler[0], $vars);
+        return $this->execute([$controller, $handler[1]], $vars);
+    }
+
+    /**
+     * @param $result
+     * @param $templatePath
+     * @return false|null|string
+     * @throws \NashInject\Exception\InjectorException
+     * @throws \ReflectionException
+     */
+    protected function transResult($result, $templatePath)
+    {
+        if (is_string($result)) {
+            return $result;
+        }
+        if ($result instanceof ViewModel) {
+            header('Content-Type: text/html;charset=utf-8');
+            return $this->make(ViewEngine::class)->render(
+                $result->getTemplate() ?? $templatePath,
+                $result
+            );
+        } elseif (isset($result)) {
+            header('Content-Type: text/json;charset=utf-8');
+            return json_encode($result);
+        }
+        return null;
+    }
+
+    /**
+     * @param string $eventName
+     * @param callable $eventCall
+     * @return $this
+     */
+    public function on(string $eventName, callable $eventCall)
+    {
+        $this->event[$eventName] = $eventCall;
+        return $this;
+    }
+
+    /**
+     * @param string $evnFile
+     * @return App
+     * @throws \NashInject\Exception\InjectorException
+     * @throws \ReflectionException
+     */
+    public static function createFPM(string $evnFile): self
+    {
+        $app = new App;
+
+        $app->share(Config::class, function () use ($evnFile) {
+            return new Config($evnFile);
+        });
+
+        $app->share(Router::class, function (Config $config) {
+            return new Router(
+                $config->get('SYSTEM_CONTROLLER_DIR'),
+                $config->get('SYSTEM_CONTROLLER_NAMESPACE'),
+                $config->get('SYSTEM_RUNTIME_DIR') . '/route.cache',
+                $config->get('SYSTEM_DEBUG')
+            );
+        });
+
+        $app->share(Request::class, function () {
+            return new Request($_GET, $_POST, $_SERVER, $_FILES, $_COOKIE, file_get_contents('php://input'));
+        });
+
+        $app->share(ViewEngine::class, function (Config $config) {
+            return new ViewEngine(
+                $config->get('VIEW_PATH'),
+                $config->get('VIEW_CACHE_PATH'),
+                $config->get('VIEW_EXTENSION'),
+                $config->get('VIEW_CHARSET'),
+                $config->get('SYSTEM_DEBUG')
+            );
+        });
+
+        $app->share(Medoo::class, function (Config $config){
+            $args = ['database_type' => $config->get('DB_TYPE')];
+            if ($args['database_type'] === 'sqlite') {
+                $args['database_file'] = $config->get('DB_FILE');
+            } else {
+                $args['database_name'] = $config->get('DB_DBNAME');
+                $args['server'] = $config->get('DB_HOST');
+                $args['username'] = $config->get('DB_USERNAME');
+                $args['password'] = $config->get('DB_PASSWORD');
+                if ($port = $config->get('DB_PORT')) {
+                    $args['port'] = $port;
+                }
+                if ($charset = $config->get('DB_CHARSET')) {
+                    $args['charset'] = $charset;
+                }
+                if ($driver = $config->get('DB_DRIVER')) {
+                    $args['driver'] = $driver;
                 }
             }
-        }
-    }
-
-    /**
-     * @param $name
-     * @return string
-     */
-    public function transPath($name)
-    {
-        return strtolower(preg_replace('/([A-Z])/', '-${1}', lcfirst($name)));
-    }
-
-    /**
-     * @param array $routeInfo
-     * @return mixed
-     * @throws Exception
-     * @throws \NashInject\Exception\InjectorException
-     * @throws \ReflectionException
-     */
-    private function run(array $routeInfo)
-    {
-        switch ($routeInfo[0]) {
-            case Dispatcher::NOT_FOUND:
-                throw new Exception(404, '找不到指定的位置');
-            case Dispatcher::METHOD_NOT_ALLOWED:
-                throw new Exception(405, '请求方式不被允许');
-            case Dispatcher::FOUND:
-                return $this->getInjector()->execute(
-                    [$this->getInjector()->make($routeInfo[1][0], $routeInfo[2]), $routeInfo[1][1]],
-                    $routeInfo[2]
-                );
-        }
-        throw new Exception('Internal Server Error', 500);
-    }
-
-    /**
-     * @param string $env
-     * @throws \NashInject\Exception\InjectorException
-     */
-    private function init(string $env)
-    {
-        $env = is_file($file = $this->rootPath . DIRECTORY_SEPARATOR . $env) ? file_get_contents($file) : $env;
-        $this->getInjector()->share(Config::class, [], function (Config $config) use ($env) {
-            $config->parse($env);
+            return new Medoo($args);
         });
-        $this->getInjector()->share(Request::class, [
-            'get' => $_GET, 'post' => $_POST, 'cookie' => $_COOKIE,
-            'files' => $_FILES, 'server' => $_SERVER, 'raw' => file_get_contents('php://input')
-        ]);
+
+        $config = $app->make(Config::class);
+
+        if (!$config->get('SYSTEM_DEBUG')) {
+            $app->on('exception', function (\Throwable $throwable) {
+                $code = $throwable->getCode();
+                if ($code == 404 || $code == 500) {
+                    header("HTTP/1.0 {$code} " . $throwable->getMessage());
+                }
+            });
+        }
+        return $app;
     }
 }

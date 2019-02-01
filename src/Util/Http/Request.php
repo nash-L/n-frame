@@ -2,84 +2,82 @@
 /**
  * Created by PhpStorm.
  * User: 18695
- * Date: 2019/1/21
- * Time: 0:16
+ * Date: 2019/1/31
+ * Time: 15:30
  */
 
 namespace NashFrame\Util\Http;
 
 
-final class Request
+class Request
 {
-    private $get, $post, $cookie, $files, $server, $raw;
+    protected $query, $post, $raw, $server, $files, $cookie, $rawData;
 
-    public function __construct(array $get, array $post, array $cookie, array $files, array $server, string $raw)
+    public function __construct(array $get, array $post, array $server, array $files, array $cookie, string $raw)
     {
-        $this->raw = $raw;
-        $this->get = $get;
+        $this->query = $get;
         $this->post = $post;
-        $this->cookie = $cookie;
-        $this->files = $files;
         $this->server = $server;
-    }
-
-    /**
-     * @param null $key
-     * @return array|mixed|null
-     */
-    public function getQuery($key = null)
-    {
-        return $this->getData($this->get, $key);
-    }
-
-    /**
-     * @param null $key
-     * @return array|mixed|null
-     */
-    public function getServer($key = null)
-    {
-        return $this->getData($this->server, $key);
-    }
-
-    /**
-     * @param $data
-     * @param null $key
-     * @return array|null
-     */
-    private function getData($data, $key = null)
-    {
-        if (is_string($key)) {
-            return $data[$key] ?? null;
-        } elseif (is_array($key)) {
-            foreach ($key as $index => $item) {
-                $key[$index] = $this->getData($data, $item);
+        $this->files = $files;
+        $this->cookie = $cookie;
+        $this->raw = $raw;
+        $this->rawData = [];
+        if ($raw) {
+            if ($rawDataJson = json_decode($raw, true)) {
+                $this->rawData = $rawDataJson;
+            } elseif ($xml = simplexml_load_string($raw)) {
+                $this->rawData = json_decode(json_encode($xml), true);
             }
-            return $key;
         }
-        return $data;
     }
 
-    /**
-     * @return string
-     */
-    public function getMethod(): string
+    public function getQuery($args = null)
     {
-        return strtoupper($this->getServer('REQUEST_METHOD'));
+        return $this->getData($this->query, $args);
     }
 
-    /**
-     * @return string
-     */
-    public function getRaw(): string
+    public function getPost($args = null)
+    {
+        return $this->getData($this->post, $args);
+    }
+
+    public function getCookie($args = null)
+    {
+        return $this->getData($this->cookie, $args);
+    }
+
+    public function getServer($args = null)
+    {
+        return $this->getData($this->server, $args);
+    }
+
+    public function getFiles($args = null)
+    {
+        return $this->getData($this->files, $args);
+    }
+
+    public function getRaw()
     {
         return $this->raw;
     }
 
-    /**
-     * @return string
-     */
-    public function getUrl(): string
+    public function getRawData($args = null)
     {
-        return explode('?', $this->getServer('REQUEST_URI'), 2)[0];
+        return $this->getData($this->rawData, $args);
+    }
+
+    protected function getData(array $pool, $keys)
+    {
+        if (empty($keys)) {
+            return $pool;
+        } elseif (is_string($keys)) {
+            return isset($pool[$keys]) ? $pool[$keys] : null;
+        } elseif (is_array($keys)) {
+            foreach ($keys as $index => $key) {
+                $keys[$index] = $this->getData($pool, $key);
+            }
+            return $keys;
+        }
+        return null;
     }
 }

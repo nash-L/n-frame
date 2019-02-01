@@ -2,31 +2,27 @@
 /**
  * Created by PhpStorm.
  * User: 18695
- * Date: 2019/1/20
- * Time: 11:33
+ * Date: 2019/1/31
+ * Time: 14:03
  */
 
-namespace NashFrame;
+namespace NashFrame\Util\Config;
 
 
 use M1\Env\Parser;
-use NashFrame\Traits\InjectorTrait;
-use NashInject\Injector;
 
 class Config
 {
-    use InjectorTrait;
-
     protected $conf;
 
     /**
      * Config constructor.
-     * @param Injector $injector
+     * @param string $env
      */
-    public function __construct(Injector $injector)
+    public function __construct(string $env)
     {
         $this->conf = [];
-        $this->setInjector($injector);
+        is_file($env) ? $this->loadFile($env) : $this->parse($env);
     }
 
     /**

@@ -9,12 +9,20 @@
 namespace App\Controller;
 
 
-use NashFrame\Annotations\Route;
+
+use NashFrame\Util\Router\Annotations\Route;
+use NashFrame\Util\View\ViewModel;
 
 class Index
 {
-    public function main()
-    {}
+    /**
+     * @Route("/")
+     */
+    public function main(ViewModel $viewModel)
+    {
+        $viewModel->assign('name', 'nash');
+        return $viewModel;
+    }
 
     /**
      * @Route("/user/{id:\d+}")

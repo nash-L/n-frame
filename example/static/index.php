@@ -2,14 +2,14 @@
 /**
  * Created by PhpStorm.
  * User: 18695
- * Date: 2019/1/20
- * Time: 11:34
+ * Date: 2019/1/31
+ * Time: 14:10
  */
 
 defined('ROOT') || define('ROOT', dirname(__DIR__));
 
 require dirname(ROOT) . '/vendor/autoload.php';
 
-$app = new NashFrame\App(ROOT);
+$app = \NashFrame\App::createFPM(ROOT . '/.env');
 
-echo $app->display('.env');
+echo $app->display();
